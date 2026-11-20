@@ -5,7 +5,7 @@ Resizing a container can leave a child of a `uigridlayout` reporting its previou
 
 ## Installation
 
-Download and extract the files. Keep `waitForFigureLayout.m` and `waitForFigureLayout.js` in the same folder, and make that folder your MATLAB current folder or add it to the MATLAB path.
+Download and extract the files. Keep `waitForFigureLayout.m`, `waitForFigureLayout.js`, and `FigureLayoutWaitReply.m` together. Make their parent folder your MATLAB current folder or add it to the MATLAB path.
 
 ## Usage
 
@@ -27,7 +27,20 @@ drawnow;
 position = child.Position
 ```
 
-Keep the figure visible while waiting so the browser can deliver the animation frame. Repeat the `drawnow` and wait sequence after later layout changes, before reading the affected components' positions.
+Repeat the `drawnow` and wait sequence after later layout changes, before reading the affected components' positions.
+
+Use `info = waitForFigureLayout(fig)` to inspect the wait. The output includes:
+
+| Field | Meaning |
+| --- | --- |
+| `hooked`, `watched` | Number of newly hooked and total observed resize emitters |
+| `quieted` | The resize quiet period completed within 3 seconds |
+| `imagesWaited`, `imagesLoaded` | Number of pending images observed and whether all became complete or reported an error within 500 ms |
+| `stabilized` | The browser ViewModel's `stabilize()` was available and completed within 500 ms |
+| `framed` | The browser delivered an animation frame within 500 ms |
+| `matlabSeconds`, `token` | Total elapsed time on the MATLAB side and the request identifier |
+
+When a browser stage reaches its time limit, its flag is false and the wait continues to the next stage. Callers that require a settled layout can check the relevant flags before using the positions.
 
 ## Demo
 
@@ -44,7 +57,7 @@ The demo uses `uifigure` as shipped. For the browser-wait run in R2025a or later
 
 The Grid Layout controller in the inspected releases throttles parent resize callbacks to 200 ms. A resize burst can leave a trailing callback on a timer, outside the work tracked by the ViewModel's `stabilize()` method.
 
-The function runs JavaScript inside the figure's browser window and wraps internal container resize event emitters. It waits for 220 ms of quiet, allowing for the 200 ms throttle plus a 20 ms margin. Each observed resize restarts the quiet period, giving nested layouts time to schedule their own resize work. It then awaits `stabilize()` where available and waits one animation frame. The completion event goes back to MATLAB through the figure's ViewModel, following position notifications already dispatched on that channel.
+The function runs JavaScript inside the figure's browser window and wraps internal container resize event emitters. It waits for 220 ms of quiet, allowing for the 200 ms throttle plus a 20 ms margin. Each observed resize restarts the quiet period, giving nested layouts time to schedule their own resize work. It then waits for pending images, awaits `stabilize()` where available, and waits one animation frame. The completion event goes back to MATLAB through the figure's ViewModel, following position notifications already dispatched on that channel. MATLAB uses `waitfor` and a single-shot timeout timer to receive the result.
 
 The resize hooks stay installed for the life of the figure. The 220 ms quiet period is a heuristic, so layout changes scheduled for later can still change `Position`. The function raises an error if the browser reports a failure or MATLAB times out waiting for the reply.
 
